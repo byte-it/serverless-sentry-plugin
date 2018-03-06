@@ -5,7 +5,8 @@ const _ = require("lodash")
 	, SemVer = require("semver")
 	, uuid = require("uuid/v4")
 	, request = require("superagent")
-	, GitRev = require("./git-rev");
+	, GitRev = require("./git-rev")
+	, glob = require("glob-all");
 
 /**
  * Serverless Plugin forward Lambda exceptions to Sentry (https://sentry.io)
@@ -24,6 +25,11 @@ class Sentry {
 			"after:package:initialize": () => BbPromise.bind(this)
 				.then(this.setRelease)
 				.then(this.instrumentFunctions),
+
+			"before:package:createDeploymentArtifacts": () => BbPromise.bind(this)
+				.then(this.createSentryRelease)
+				.then(this.deploySentryRelease)
+				.then(this.deploySentrySourceMaps),
 
 			"before:deploy:deploy": () => BbPromise.bind(this)
 				.then(this.validate),
@@ -285,6 +291,61 @@ class Sentry {
 				this._serverless.cli.log(`Sentry: Received error response from Sentry:\n${err.response.text}`);
 			}
 			return BbPromise.reject(new this._serverless.classes.Error("Sentry: Error deploying release - " + err.toString()));
+		});
+	}
+
+	deploySentrySourceMaps() {
+		if (!this.sentry.authToken || !this.sentry.release) {
+			// Nothing to do
+			return BbPromise.resolve();
+		}
+
+		const organization = this.sentry.organization;
+		const release = this.sentry.release;
+		const buildDirectory = this._serverless.config.servicePath;
+		this._serverless.cli.log(
+			`Sentry: Uploading source maps for "${release.version}" from directory ${buildDirectory}...`
+		);
+		
+		const upload = filepath => BbPromise.fromCallback(cb => {
+			this._serverless.cli.log(
+				`Sentry: Uploading file ${filepath} to sentry...`
+			);	
+			return request.post(
+				`https://sentry.io/api/0/organizations/${organization}/releases/${encodeURIComponent(
+					release.version
+				)}/files/`
+			).set("Authorization", `Bearer ${this.sentry.authToken}`)
+			.attach(
+				"file",
+				filepath
+			)
+			.end( (error, result) => {
+				if(result && result.status === 409) {
+					return cb(null, result);
+				}
+			
+				if(error) {
+					return cb(error);
+				}
+	
+				return cb(null, result);
+			});
+		});
+		
+		const types = ["js", "js.map"];
+		const files = glob.sync(types.map( t => `${buildDirectory}/**/*.${t}`).concat(types.map( t => `${buildDirectory}/../node_modules/**/*.${t}`))); 		const uploads = files.map( f => () => upload(f));
+		return BbPromise.map(uploads, u => u(), { concurrency: 10 }).catch(err => {
+			if (err && err.response && err.responsetext) {
+				this._serverless.cli.log(
+					`Sentry: Received error response from Sentry:\n${err.response.text}`
+				);
+			}
+			return BbPromise.reject(
+				new this._serverless.classes.Error(
+					"Sentry: Error uploading source map - " + err.stack
+				)
+			);
 		});
 	}
 
