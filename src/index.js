@@ -6,7 +6,8 @@ const _ = require("lodash")
 	, uuid = require("uuid/v4")
 	, request = require("superagent")
 	, GitRev = require("./git-rev")
-	, glob = require("glob-all");
+	, glob = require("glob-all")
+	, Throttle = require('superagent-throttle');
 
 /**
  * Serverless Plugin forward Lambda exceptions to Sentry (https://sentry.io)
@@ -323,9 +324,14 @@ class Sentry {
 		this._serverless.cli.log(
 			`Sentry: Uploading source maps for "${release.version}" from directory "${buildDirectory}"...`
 		);
-	
-		const retryCount = {};
-		const retries = 3;
+
+		const throttle = new Throttle({
+			active: true,     // set false to pause queue
+			rate: 10,          // how many requests can be sent every `ratePer`
+			ratePer: 1000,   // number of ms in which `rate` requests may be sent
+			concurrent: 2     // how many requests can be sent concurrently
+		});
+
 		const upload = filepath => BbPromise.fromCallback(cb => {
 			this._serverless.cli.log(
 				`Sentry: Uploading file ${filepath} to sentry...`
@@ -340,22 +346,20 @@ class Sentry {
 				filepath,
 				filepath
 			)
+			.use(throttle.plugin())
+			.retry(3, () => {
+				this._serverless.cli.log(
+					`Sentry: Uploading source map failed for ${filepath}...`
+				);	
+				return true;
+			})
 			.end( (error, result) => {
 				if(result && result.status === 409) {
 					return cb(null, result);
 				}
 
 				if(error) {
-					if(!retryCount[filepath]) {
-						retryCount[filepath] = 0;
-					}
-
-					retryCount[filepath] += 1;
-					if(retryCount[filepath] > retries) {
-						return cb(error);
-					}
-
-					return upload(filepath);
+					return cb(error);
 				}
 	
 				return cb(null, result);
@@ -372,7 +376,7 @@ class Sentry {
 		);	
 		const files = glob.sync(globs);
 		const uploads = files.map( f => () => upload(f));
-		return BbPromise.map(uploads, u => u(), { concurrency: 10 }).catch(err => {
+		return BbPromise.map(uploads, u => u()).catch(err => {
 			if (err && err.response && err.responsetext) {
 				this._serverless.cli.log(
 					`Sentry: Received error response from Sentry:\n${err.response.text}`
