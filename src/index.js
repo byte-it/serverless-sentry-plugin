@@ -323,7 +323,9 @@ class Sentry {
 		this._serverless.cli.log(
 			`Sentry: Uploading source maps for "${release.version}" from directory "${buildDirectory}"...`
 		);
-		
+	
+		const retryCount = {};
+		const retries = 3;
 		const upload = filepath => BbPromise.fromCallback(cb => {
 			this._serverless.cli.log(
 				`Sentry: Uploading file ${filepath} to sentry...`
@@ -342,9 +344,18 @@ class Sentry {
 				if(result && result.status === 409) {
 					return cb(null, result);
 				}
-			
+
 				if(error) {
-					return cb(error);
+					if(!retryCount[filepath]) {
+						retryCount[filepath] = 0;
+					}
+
+					retryCount[filepath] += 1;
+					if(retryCount[filepath] > retries) {
+						return cb(error);
+					}
+
+					return upload(filepath);
 				}
 	
 				return cb(null, result);
