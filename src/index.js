@@ -295,7 +295,7 @@ class Sentry {
 	}
 
 	deploySentrySourceMaps() {
-		if (!this.sentry.authToken || !this.sentry.release) {
+		if (!this.sentry.authToken || !this.sentry.release || !this.sentry.uploadSourcemaps) {
 			// Nothing to do
 			return BbPromise.resolve();
 		}
@@ -318,6 +318,7 @@ class Sentry {
 			).set("Authorization", `Bearer ${this.sentry.authToken}`)
 			.attach(
 				"file",
+				filepath,
 				filepath
 			)
 			.end( (error, result) => {
@@ -333,8 +334,8 @@ class Sentry {
 			});
 		});
 		
-		const types = ["js", "js.map"];
-		const files = glob.sync(types.map( t => `${buildDirectory}/**/*.${t}`).concat(types.map( t => `${buildDirectory}/../node_modules/**/*.${t}`))); 		const uploads = files.map( f => () => upload(f));
+		const types = ["js", "js.map", "ts"];
+		const files = glob.sync(types.map( t => `${buildDirectory}/../**/*.${t}`)); 		const uploads = files.map( f => () => upload(f));
 		return BbPromise.map(uploads, u => u(), { concurrency: 10 }).catch(err => {
 			if (err && err.response && err.responsetext) {
 				this._serverless.cli.log(
