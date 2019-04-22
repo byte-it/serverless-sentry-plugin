@@ -28,8 +28,11 @@ class Sentry {
 
 			"before:package:createDeploymentArtifacts": () => BbPromise.bind(this)
 				.then(this.createSentryRelease)
-				.then(this.deploySentryRelease)
+				.then(this.deploySentryRelease),
+
+			"after:package:createDeploymentArtifacts": () => BbPromise.bind(this)
 				.then(this.deploySentrySourceMaps),
+
 
 			"before:deploy:deploy": () => BbPromise.bind(this)
 				.then(this.validate),
@@ -318,7 +321,7 @@ class Sentry {
 		const release = this.sentry.release;
 		const buildDirectory = this._serverless.config.servicePath;
 		this._serverless.cli.log(
-			`Sentry: Uploading source maps for "${release.version}" from directory ${buildDirectory}...`
+			`Sentry: Uploading source maps for "${release.version}" from directory "${buildDirectory}"...`
 		);
 		
 		const upload = filepath => BbPromise.fromCallback(cb => {
@@ -349,7 +352,15 @@ class Sentry {
 		});
 		
 		const types = ["js", "js.map", "ts"];
-		const files = glob.sync(types.map( t => `${buildDirectory}/../**/*.${t}`)); 		const uploads = files.map( f => () => upload(f));
+		const globs = types
+			.map( t => `${buildDirectory}/**/*.${t}`)
+			.concat(types.map( t => `${buildDirectory}/../node_modules/**/*.${t}`));
+			
+		this._serverless.cli.log(
+			`Sentry: Uploading source maps for globs ${globs}...`
+		);	
+		const files = glob.sync(globs);
+		const uploads = files.map( f => () => upload(f));
 		return BbPromise.map(uploads, u => u(), { concurrency: 10 }).catch(err => {
 			if (err && err.response && err.responsetext) {
 				this._serverless.cli.log(
