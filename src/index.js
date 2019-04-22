@@ -353,8 +353,7 @@ class Sentry {
 		
 		const types = ["js", "js.map", "ts"];
 		const globs = types
-			.map( t => `${buildDirectory}/**/*.${t}`)
-			.concat(types.map( t => `${buildDirectory}/../node_modules/**/*.${t}`));
+			.map( t => `${buildDirectory}/../**/*.${t}`);
 			
 		this._serverless.cli.log(
 			`Sentry: Uploading source maps for globs ${globs}...`
