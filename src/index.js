@@ -328,9 +328,9 @@ class Sentry {
 
 		const throttle = new Throttle({
 			active: true,     // set false to pause queue
-			rate: 100,          // how many requests can be sent every `ratePer`
+			rate: 1000,          // how many requests can be sent every `ratePer`
 			ratePer: 1000,   // number of ms in which `rate` requests may be sent
-			concurrent: 10     // how many requests can be sent concurrently
+			concurrent: 100     // how many requests can be sent concurrently
 		}).on("sent", (request) => {
 			this._serverless.cli.log(
 				`Sentry: Uploading file ${request.filepath} to sentry...`
