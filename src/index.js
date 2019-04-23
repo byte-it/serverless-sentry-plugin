@@ -328,9 +328,9 @@ class Sentry {
 
 		const throttle = new Throttle({
 			active: true,     // set false to pause queue
-			rate: 100,          // how many requests can be sent every `ratePer`
+			rate: 10,          // how many requests can be sent every `ratePer`
 			ratePer: 1000,   // number of ms in which `rate` requests may be sent
-			concurrent: 100     // how many requests can be sent concurrently
+			concurrent: 2     // how many requests can be sent concurrently
 		}).on("sent", (request) => {
 			this._serverless.cli.log(
 				`Sentry: Uploading file ${request.filename} to sentry...`
@@ -367,7 +367,7 @@ class Sentry {
 			.retry(3, (error) => {
 				if(error) {
 					this._serverless.cli.log(
-						`Sentry: Uploading file ${filepath} to sentry failed with error ${error}...`
+						`Sentry: Uploading file ${filename} to sentry failed with error ${error}...`
 					);
 				}
 			})
