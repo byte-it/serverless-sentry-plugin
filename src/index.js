@@ -339,12 +339,12 @@ class Sentry {
 
 		const upload = filepath => BbPromise.fromCallback(cb => {
 
-			let filename = null;
-			if(_.includes(filepath, "node_modules")) {
-				filename = `/var/task/node_modues/${filepath.split("node_modules/")[1]}`;
+			let filename = filepath.split(buildDirectory)[1];
+			if(filename.startsWith("node_modules")) {
+				filename = `/var/task/${filename}`;
 			} 
 			else {
-				filename = `/var/${filepath.split(buildDirectory)[1]}`;
+				filename = `/var/${filename}`;
 			}
 
 			return request.post(
@@ -387,6 +387,7 @@ class Sentry {
 		const types = ["js", "js.map", "ts"];
 		const globs = types
 			.map( t => `${buildDirectory}/**/*.${t}`)
+			.concat(`!${buildDirectory}/node_modules`)
 			.concat(`!${buildDirectory}/**/*.d.ts`);
 			
 		this._serverless.cli.log(
