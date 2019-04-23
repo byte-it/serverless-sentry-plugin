@@ -7,8 +7,8 @@ const _ = require("lodash")
 	, request = require("superagent")
 	, GitRev = require("./git-rev")
 	, glob = require("glob-all")
-	, util = require("util")
-	, Throttle = require('superagent-throttle');
+	, path = require("path")
+	, Throttle = require("superagent-throttle");
 
 /**
  * Serverless Plugin forward Lambda exceptions to Sentry (https://sentry.io)
@@ -321,7 +321,7 @@ class Sentry {
 
 		const organization = this.sentry.organization;
 		const release = this.sentry.release;
-		const buildDirectory = this._serverless.config.servicePath;
+		const buildDirectory = path.join(this._serverless.config.servicePath, "../");
 		this._serverless.cli.log(
 			`Sentry: Uploading source maps for "${release.version}" from directory "${buildDirectory}"...`
 		);
@@ -333,11 +333,19 @@ class Sentry {
 			concurrent: 100     // how many requests can be sent concurrently
 		}).on("sent", (request) => {
 			this._serverless.cli.log(
-				`Sentry: Uploading file ${request.filepath} to sentry...`
+				`Sentry: Uploading file ${request.filename} to sentry...`
 			);
 		});
 
 		const upload = filepath => BbPromise.fromCallback(cb => {
+
+			let filename = null;
+			if(_.includes(filepath, "node_modules")) {
+				filename = `/var/task/node_modues/${filepath.split("node_modules/")[1]}`;
+			} 
+			else {
+				filename = `/var/${filepath.split(buildDirectory)[1]}`;
+			}
 
 			return request.post(
 				`https://sentry.io/api/0/organizations/${organization}/releases/${encodeURIComponent(
@@ -348,10 +356,11 @@ class Sentry {
 			.attach(
 				"file",
 				filepath,
-				filepath
+				filename
 			)
 			.use((req) => {
-				req.filepath = filepath; 
+				req.filepath = filepath;
+				req.filename = filename;
 				return req;
 			})
 			.use(throttle.plugin())
@@ -377,8 +386,8 @@ class Sentry {
 		
 		const types = ["js", "js.map", "ts"];
 		const globs = types
-			.map( t => `${buildDirectory}/../**/*.${t}`)
-			.concat(`!${buildDirectory}/../**/*.d.ts`);
+			.map( t => `${buildDirectory}/**/*.${t}`)
+			.concat(`!${buildDirectory}/**/*.d.ts`);
 			
 		this._serverless.cli.log(
 			`Sentry: Uploading source maps for globs ${globs}...`
