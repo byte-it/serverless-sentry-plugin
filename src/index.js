@@ -5,7 +5,10 @@ const _ = require("lodash")
 	, SemVer = require("semver")
 	, uuid = require("uuid/v4")
 	, request = require("superagent")
-	, GitRev = require("./git-rev");
+	, GitRev = require("./git-rev")
+	, SentryCli = require('@sentry/cli')
+	, tmp = require('tmp')
+	, AdmZip = require('adm-zip');
 
 /**
  * Serverless Plugin forward Lambda exceptions to Sentry (https://sentry.io)
@@ -30,7 +33,8 @@ class Sentry {
 
 			"after:deploy:deploy": () => BbPromise.bind(this)
 				.then(this.createSentryRelease)
-				.then(this.deploySentryRelease),
+				.then(this.deploySentryRelease)
+				.then(this.uploadSentryArtifacts),
 			
 			"before:invoke:local:invoke": () => BbPromise.bind(this)
 				.then(this.validate)
@@ -286,6 +290,22 @@ class Sentry {
 			}
 			return BbPromise.reject(new this._serverless.classes.Error("Sentry: Error deploying release - " + err.toString()));
 		});
+	}
+
+	uploadSentryArtifacts(){
+		if (!this.sentry.authToken || !this.sentry.release || !this.sentry.uploadsourcemaps) {
+			// Nothing to do
+			return BbPromise.resolve();
+		}
+		const tmpdir = tmp.dirSync();
+		const zip = new AdmZip(path.join(this.serverless.config.servicePath,".serverless/ah-serverless-boilerplate.zip"));
+		this._serverless.cli.log(`Sentry: extract ah-serverless-boilerplate.zip to ${tmpdir.name}`);
+		zip.extractAllTo(tmpdir.name);
+		const cli = new SentryCli();
+		const ignoreFile = "--ignore-file "+path.join(this.serverless.config.servicePath,".sentryignore");
+		const args = `releases files ${this.sentry.release} upload-sourcemaps ${tmpdir.name}/src --validate ${ignoreFile} --rewrite --url-prefix '~/'`
+		this._serverless.cli.log(`Sentry: sentry-cli ${args}`);
+		cli.execute(args).then(tmpdir.removeCallback())
 	}
 
 	getRandomVersion() {
