@@ -1,14 +1,16 @@
 "use strict";
 
-const _ = require("lodash")
-	, BbPromise = require("bluebird")
-	, SemVer = require("semver")
-	, uuid = require("uuid/v4")
-	, request = require("superagent")
-	, GitRev = require("./git-rev")
-	, SentryCli = require('@sentry/cli')
-	, tmp = require('tmp')
-	, AdmZip = require('adm-zip');
+const _ = require("lodash"),
+  BbPromise = require("bluebird"),
+  SemVer = require("semver"),
+  uuid = require("uuid/v4"),
+  request = require("superagent"),
+  GitRev = require("./git-rev"),
+  SentryCli = require("@sentry/cli"),
+  tmp = require("tmp"),
+  path = require("path"),
+  AdmZip = require("adm-zip"),
+  rmrf = require("rmrf-promise");
 
 /**
  * Serverless Plugin forward Lambda exceptions to Sentry (https://sentry.io)
@@ -292,20 +294,46 @@ class Sentry {
 		});
 	}
 
-	uploadSentryArtifacts(){
-		if (!this.sentry.authToken || !this.sentry.release || !this.sentry.uploadsourcemaps) {
-			// Nothing to do
-			return BbPromise.resolve();
+	async uploadSentryArtifacts() {
+		if (
+		  !this.sentry.authToken ||
+		  !this.sentry.release ||
+		  !this.sentry.release.sourcemaps
+		) {
+		  // Nothing to do
+		  return BbPromise.resolve();
 		}
-		const tmpdir = tmp.dirSync();
-		const zip = new AdmZip(path.join(this.serverless.config.servicePath,".serverless/ah-serverless-boilerplate.zip"));
-		this._serverless.cli.log(`Sentry: extract ah-serverless-boilerplate.zip to ${tmpdir.name}`);
+		const tmpdir = tmp.dirSync({ keep: false });
+		const zipfile = `${this._serverless.service.service}.zip`;
+		const zip = new AdmZip(
+		  path.join(this._serverless.config.servicePath, ".serverless", zipfile)
+		);
+		this._serverless.cli.log(`Sentry: extract ${zipfile} to ${tmpdir.name}`);
 		zip.extractAllTo(tmpdir.name);
 		const cli = new SentryCli();
-		const ignoreFile = "--ignore-file "+path.join(this.serverless.config.servicePath,".sentryignore");
-		const args = `releases files ${this.sentry.release} upload-sourcemaps ${tmpdir.name}/src --validate ${ignoreFile} --rewrite --url-prefix '~/'`
+		const args = [
+		  "releases",
+		  "files",
+		  this.sentry.release.version,
+		  "upload-sourcemaps",
+		  `${tmpdir.name}/src`,
+		  "--validate",
+		  "--ignore-file",
+		  path.join(this._serverless.config.servicePath, ".sentryignore"),
+		  "--rewrite",
+		  "--url-prefix",
+		  "~/"
+		];
 		this._serverless.cli.log(`Sentry: sentry-cli ${args}`);
-		cli.execute(args).then(tmpdir.removeCallback())
+		try {
+		  await cli.execute(args, true);
+		  //tmpdir.removeCallback();
+		  this._serverless.cli.log(`Sentry: done`);
+		} catch (err) {
+		  this._serverless.cli.log(`Sentry: Error: ${err}`);
+		}
+		await rmrf(tmpdir.name);
+		return BbPromise.resolve();
 	}
 
 	getRandomVersion() {
