@@ -156,8 +156,8 @@ class Sentry {
 		if (_.has(sentryConfig, "captureTimeoutWarnings")) {
 			_.set(functionObject, "environment.SENTRY_CAPTURE_TIMEOUTS", String(sentryConfig.captureTimeoutWarnings));
 		}
-		if (_.has(sentryConfig, "release.sourceMaps")) {
-			_.set(functionObject, "environment.SENTRY_SOURCEMAPS", String(sentryConfig.release.sourceMaps));
+		if (_.has(sentryConfig, "release.sourcemaps")) {
+			_.set(functionObject, "environment.SENTRY_SOURCEMAPS", String(sentryConfig.release.sourcemaps));
 		}
 
 		return BbPromise.resolve(functionObject);
