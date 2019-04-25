@@ -311,7 +311,7 @@ class Sentry {
 		const zip = new AdmZip(
 		  path.join(this._serverless.config.servicePath, ".serverless", zipfile)
 		);
-		this._serverless.cli.log(`Sentry: extract ${zipfile} to ${tmpdir.name}`);
+		this._serverless.cli.log(`Sentry: extract ${zipfile} to TEMP`);
 		zip.extractAllTo(tmpdir.name);
 		const cli = new SentryCli();
 		const args = [
@@ -327,13 +327,13 @@ class Sentry {
 		  "--url-prefix",
 		  "~/"
 		];
-		this._serverless.cli.log(`Sentry: sentry-cli ${args}`);
+		
 		try {
 		  await cli.execute(args, true);
-		  //tmpdir.removeCallback();
 		  this._serverless.cli.log(`Sentry: done`);
 		} catch (err) {
 		  this._serverless.cli.log(`Sentry: Error: ${err}`);
+		  this._serverless.cli.log(`Sentry: sentry-cli ${args}`);
 		}
 		await rmrf(tmpdir.name);
 		return BbPromise.resolve();
