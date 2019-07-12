@@ -208,6 +208,13 @@ you need to grant API access to this plugin by setting the following options:
 [Auth Tokens](https://docs.sentry.io/api/auth/#auth-tokens) not API Keys,
 which are deprecated.
 
+### Custom sentry url
+It is possible to define the url to an on-premise sentry instance.
+Just add the `url` option to your config.
+
+```
+url: https://sentry.mycompany.com
+```
 
 ### Releases
 Releases are used by Sentry to provide you with additional context when
@@ -226,6 +233,7 @@ custom:
     organization: my-sentry-organziation
     project: my-sentry-project
     authToken: my-sentry-api-key
+    url: https://mysentry.com
     release:
       version: <RELEASE VERSION>
       refs:
