@@ -236,6 +236,7 @@ custom:
     url: https://mysentry.com
     release:
       version: <RELEASE VERSION>
+      sourcemaps: true
       refs:
         - repository: <REPOSITORY NAME>
           commit: <COMMIT HASH>
@@ -251,6 +252,9 @@ custom:
   - `false` - Disable release versioning.
   - any fixed string - Use a fixed string for the release. Serverless variables
     are allowed.
+
+* `sourcemaps` - if set to true, upload of sources and sourcemaps to sentry.io based
+   on files in `.serverless/<service>.zip`
 
 * `refs` - If you have set up Sentry to collect commit data, you can use commit
   refs to associate your commits with your Sentry releases. Refer to the
