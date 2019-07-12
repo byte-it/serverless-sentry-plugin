@@ -1,16 +1,16 @@
 "use strict";
 
 const _ = require("lodash"),
-  BbPromise = require("bluebird"),
-  SemVer = require("semver"),
-  uuid = require("uuid/v4"),
-  request = require("superagent"),
-  GitRev = require("./git-rev"),
-  SentryCli = require("@sentry/cli"),
-  tmp = require("tmp"),
-  path = require("path"),
-  AdmZip = require("adm-zip"),
-  rmrf = require("rmrf-promise");
+	BbPromise = require("bluebird"),
+	SemVer = require("semver"),
+	uuid = require("uuid/v4"),
+	request = require("superagent"),
+	GitRev = require("./git-rev"),
+	SentryCli = require("@sentry/cli"),
+	tmp = require("tmp"),
+	path = require("path"),
+	AdmZip = require("adm-zip"),
+	rmrf = require("rmrf-promise");
 
 /**
  * Serverless Plugin forward Lambda exceptions to Sentry (https://sentry.io)
@@ -37,7 +37,7 @@ class Sentry {
 				.then(this.createSentryRelease)
 				.then(this.deploySentryRelease)
 				.then(this.uploadSentryArtifacts),
-			
+
 			"before:invoke:local:invoke": () => BbPromise.bind(this)
 				.then(this.validate)
 				.then(this.setRelease)
@@ -303,43 +303,51 @@ class Sentry {
 
 	async uploadSentryArtifacts() {
 		if (
-		  !this.sentry.authToken ||
-		  !this.sentry.release ||
-		  !this.sentry.release.sourcemaps
+			!this.sentry.authToken ||
+			!this.sentry.release ||
+			!this.sentry.release.sourcemaps
 		) {
-		  // Nothing to do
-		  return BbPromise.resolve();
+			// Nothing to do
+			return BbPromise.resolve();
 		}
-		const tmpdir = tmp.dirSync({ keep: false });
+		const tmpdir = tmp.dirSync({ keep: true });
 		const zipfile = `${this._serverless.service.service}.zip`;
 		const zip = new AdmZip(
-		  path.join(this._serverless.config.servicePath, ".serverless", zipfile)
+			path.join(this._serverless.config.servicePath, ".serverless", zipfile)
 		);
 		this._serverless.cli.log(`Sentry: extract ${zipfile} to TEMP`);
-		zip.extractAllTo(tmpdir.name);
+		zip.extractAllTo('./.tmp');
 		const cli = new SentryCli();
 		const args = [
-		  "releases",
-		  "files",
-		  this.sentry.release.version,
-		  "upload-sourcemaps",
-		  `${tmpdir.name}/src`,
-		  "--validate",
-		  "--ignore-file",
-		  path.join(this._serverless.config.servicePath, ".sentryignore"),
-		  "--rewrite",
-		  "--url-prefix",
-		  "~/"
+			"--url",
+			this.sentry.url,
+			"--auth-token",
+			this.sentry.authToken,
+			"releases",
+			"--org",
+			this.sentry.organization,
+			"--project",
+			this.sentry.project,
+			"files",
+			this.sentry.release.version,
+			"upload-sourcemaps",
+			`./.tmp`,
+			"--validate",
+			"--ignore-file",
+			path.join(this._serverless.config.servicePath, ".sentryignore"),
+			"--rewrite",
+			"--url-prefix",
+			"~/",
 		];
 
 		try {
-		  await cli.execute(args, true);
-		  this._serverless.cli.log(`Sentry: done`);
+			await cli.execute(args, true);
+			this._serverless.cli.log(`Sentry: done`);
 		} catch (err) {
-		  this._serverless.cli.log(`Sentry: Error: ${err}`);
-		  this._serverless.cli.log(`Sentry: sentry-cli ${args}`);
+			this._serverless.cli.log(`Sentry: Error: ${err}`);
+			this._serverless.cli.log(`Sentry: sentry-cli ${args}`);
 		}
-		await rmrf(tmpdir.name);
+		await rmrf('./.tmp');
 		return BbPromise.resolve();
 	}
 
