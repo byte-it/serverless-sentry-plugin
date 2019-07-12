@@ -1,11 +1,16 @@
 "use strict";
 
-const _ = require("lodash")
-	, BbPromise = require("bluebird")
-	, SemVer = require("semver")
-	, uuid = require("uuid/v4")
-	, request = require("superagent")
-	, GitRev = require("./git-rev");
+const _ = require("lodash"),
+  BbPromise = require("bluebird"),
+  SemVer = require("semver"),
+  uuid = require("uuid/v4"),
+  request = require("superagent"),
+  GitRev = require("./git-rev"),
+  SentryCli = require("@sentry/cli"),
+  tmp = require("tmp"),
+  path = require("path"),
+  AdmZip = require("adm-zip"),
+  rmrf = require("rmrf-promise");
 
 /**
  * Serverless Plugin forward Lambda exceptions to Sentry (https://sentry.io)
@@ -30,8 +35,9 @@ class Sentry {
 
 			"after:deploy:deploy": () => BbPromise.bind(this)
 				.then(this.createSentryRelease)
-				.then(this.deploySentryRelease),
-
+				.then(this.deploySentryRelease)
+				.then(this.uploadSentryArtifacts),
+			
 			"before:invoke:local:invoke": () => BbPromise.bind(this)
 				.then(this.validate)
 				.then(this.setRelease)
@@ -153,6 +159,9 @@ class Sentry {
 		}
 		if (_.has(sentryConfig, "captureTimeoutWarnings")) {
 			_.set(functionObject, "environment.SENTRY_CAPTURE_TIMEOUTS", String(sentryConfig.captureTimeoutWarnings));
+		}
+		if (_.has(sentryConfig, "release.sourcemaps")) {
+			_.set(functionObject, "environment.SENTRY_SOURCEMAPS", String(sentryConfig.release.sourcemaps));
 		}
 
 		return BbPromise.resolve(functionObject);
@@ -290,6 +299,48 @@ class Sentry {
 				}
 				return BbPromise.reject(new this._serverless.classes.Error("Sentry: Error deploying release - " + err.toString()));
 			});
+	}
+
+	async uploadSentryArtifacts() {
+		if (
+		  !this.sentry.authToken ||
+		  !this.sentry.release ||
+		  !this.sentry.release.sourcemaps
+		) {
+		  // Nothing to do
+		  return BbPromise.resolve();
+		}
+		const tmpdir = tmp.dirSync({ keep: false });
+		const zipfile = `${this._serverless.service.service}.zip`;
+		const zip = new AdmZip(
+		  path.join(this._serverless.config.servicePath, ".serverless", zipfile)
+		);
+		this._serverless.cli.log(`Sentry: extract ${zipfile} to TEMP`);
+		zip.extractAllTo(tmpdir.name);
+		const cli = new SentryCli();
+		const args = [
+		  "releases",
+		  "files",
+		  this.sentry.release.version,
+		  "upload-sourcemaps",
+		  `${tmpdir.name}/src`,
+		  "--validate",
+		  "--ignore-file",
+		  path.join(this._serverless.config.servicePath, ".sentryignore"),
+		  "--rewrite",
+		  "--url-prefix",
+		  "~/"
+		];
+
+		try {
+		  await cli.execute(args, true);
+		  this._serverless.cli.log(`Sentry: done`);
+		} catch (err) {
+		  this._serverless.cli.log(`Sentry: Error: ${err}`);
+		  this._serverless.cli.log(`Sentry: sentry-cli ${args}`);
+		}
+		await rmrf(tmpdir.name);
+		return BbPromise.resolve();
 	}
 
 	getRandomVersion() {
